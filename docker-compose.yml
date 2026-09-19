@@ -1,0 +1,68 @@
+# One-command local environment:  docker compose up --build
+#
+# The credentials below are for local development only.
+#
+# Host ports can be changed if they are taken on your machine:
+#   WEB_PORT=8080 DB_PORT=3310 docker compose up --build -d web
+
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: catalog
+      MARIADB_USER: catalog
+      MARIADB_PASSWORD: catalog
+      MARIADB_ROOT_PASSWORD: root
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      # Only needed to run the test suite from the host. Not 3306, which a local
+      # MariaDB/MySQL usually occupies, and bound to localhost only: this
+      # database has throw-away credentials.
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./docker/mariadb/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      target: runtime
+    environment: &app_env
+      DJANGO_SECRET_KEY: local-development-only-secret-key
+      DJANGO_DEBUG: "false" # run the demo the way production runs
+      DJANGO_SERVE_MEDIA: "true"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: mysql://catalog:catalog@db:3306/catalog
+    # Migrating on start-up keeps the demo to one command. A real deployment
+    # runs migrations as a separate release step.
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -"
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - media_data:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # docker compose run --rm test
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      target: dev
+    environment:
+      <<: *app_env
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  media_data:

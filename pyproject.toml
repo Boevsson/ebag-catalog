@@ -1,0 +1,82 @@
+[project]
+name = "ebag-catalog"
+version = "0.1.0"
+description = "Product catalog service: products, a category tree and product search."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    # Django 5.2 is the current LTS and the newest release that every
+    # dependency below officially supports.
+    "django>=5.2,<6.0",
+    "djangorestframework>=3.16",
+    "djangorestframework-simplejwt>=5.5",
+    "drf-spectacular>=0.28",
+    "django-environ>=0.12",
+    "django-cleanup>=9.0",
+    "pillow>=11.0",
+    "gunicorn>=23.0",
+    "mysqlclient>=2.2",  # MariaDB driver; compiled against the MariaDB client library
+    # Bundled so that moving product images to a bucket is only a configuration
+    # change (MEDIA_STORAGE=gcs). Unused while MEDIA_STORAGE=local.
+    "django-storages[google]>=1.14",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-django>=4.9",
+    "pytest-cov>=6.0",
+    "factory-boy>=3.3",
+    "ruff>=0.9",
+    "pre-commit>=4.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["test_*.py"]
+addopts = "--strict-markers -ra"
+
+# Measured on demand (`make coverage`), not on every `pytest` run, so that
+# running a single test file stays fast and is not failed by the threshold.
+[tool.coverage.run]
+branch = true
+source = ["catalog", "config"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",  # generated
+    "config/wsgi.py",  # three lines of boilerplate, only executed by gunicorn
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true  # list only the files that still have gaps
+fail_under = 95
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "B",       # bugbear
+    "UP",      # pyupgrade
+    "DJ",      # django
+    "C4",      # comprehensions
+    "SIM",     # simplify
+    "PT",      # pytest style
+    "RUF",
+]
+ignore = [
+    "RUF012",  # wants ClassVar on Django's `class Meta` lists; not how Django is written
+    "RUF001",  # "ambiguous character": Bulgarian product titles are Cyrillic on purpose
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["catalog", "config"]
